@@ -1,10 +1,12 @@
-import { TrendingUp, TrendingDown, Users, Clock, AlertCircle, Package, ChevronRight, CalendarClock } from "lucide-react";
+import { AlertCircle, Package, ChevronRight, CalendarClock, Building2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 import { motion } from "motion/react";
-import { useLowStockAlerts, useSpecialOrders } from "../../hooks/useApi";
-import type { InventoryItem, SpecialOrder } from "../../types";
+import { useDashboard, useWeeklyTrend, useTopItems } from "../../hooks/useApi";
+import { useBranch } from "../Branches/BranchContext";
+import type { DashboardData, WeeklyTrendPoint, TopItem } from "../../types";
 import {
   LineChart,
   Line,
@@ -15,386 +17,275 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
-
-const revenueData = [
-  { time: "9AM", amount: 2400 },
-  { time: "12PM", amount: 4800 },
-  { time: "3PM", amount: 3200 },
-  { time: "6PM", amount: 5600 },
-  { time: "9PM", amount: 7200 },
-];
-
-const topItems = [
-  { name: "Margherita Pizza", sales: 145, revenue: 2175, image: "🍕" },
-  { name: "Caesar Salad", sales: 98, revenue: 1470, image: "🥗" },
-  { name: "Burger Deluxe", sales: 87, revenue: 1305, image: "🍔" },
-  { name: "Pasta Carbonara", sales: 76, revenue: 1140, image: "🍝" },
-];
-
-const activeOrders = [
-  { id: "#1234", orderType: "dine-in",  items: 4, status: "cooking", time: "12 min" },
-  { id: "#1235", orderType: "dine-in",  items: 2, status: "ready",   time: "2 min" },
-  { id: "#1236", orderType: "takeaway", items: 6, status: "pending", time: "18 min" },
-  { id: "#1237", orderType: "dine-in",  items: 3, status: "cooking", time: "8 min" },
-];
-
-const alerts = [
-  { type: "warning", message: "Low stock: Tomatoes (5 kg remaining)", icon: Package },
-  { type: "error", message: "Order #1232 delayed by 15 minutes", icon: Clock },
-  { type: "info", message: "3 refund requests pending approval", icon: AlertCircle },
-];
-
-const tables = [
-  { id: 1, number: "T-01", status: "occupied", guests: 4 },
-  { id: 2, number: "T-02", status: "available", guests: 0 },
-  { id: 3, number: "T-03", status: "occupied", guests: 2 },
-  { id: 4, number: "T-04", status: "reserved", guests: 6 },
-  { id: 5, number: "T-05", status: "occupied", guests: 3 },
-  { id: 6, number: "T-06", status: "available", guests: 0 },
-  { id: 7, number: "T-07", status: "occupied", guests: 2 },
-  { id: 8, number: "T-08", status: "available", guests: 0 },
-];
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
 }
 
+const formatDate = (iso: string) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+};
+
+const formatDayLabel = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { weekday: "short" });
+};
+
 export function Dashboard({ onNavigate }: DashboardProps = {}) {
-  const { data: lowStockData, isLoading: lowStockLoading } = useLowStockAlerts();
-  const lowStock: InventoryItem[] = lowStockData?.items || [];
-
-  const { data: upcomingData } = useSpecialOrders({ upcoming: true });
-  const upcomingSpecial: SpecialOrder[] = upcomingData?.orders || [];
-  const { data: pendingData } = useSpecialOrders({ paymentStatus: "pending" });
-  const pendingBalanceCount = (pendingData?.orders || []).length;
-
-  const formatSpecialDate = (iso: string) => {
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-  };
+  const { setSelectedBranchId } = useBranch();
+  const { data, isLoading } = useDashboard();
+  const dashboard: DashboardData | undefined = data;
+  const { data: trendData } = useWeeklyTrend();
+  const trend: WeeklyTrendPoint[] = trendData?.trend || [];
+  const { data: topItemsData } = useTopItems();
+  const topItems: TopItem[] = topItemsData?.topItems || [];
 
   const openLowStock = () => {
     sessionStorage.setItem("inventoryFilter", "low");
     onNavigate?.("inventory");
   };
 
+  const today = dashboard?.today;
+  const lowStock = dashboard?.lowStock;
+  const specialOrders = dashboard?.specialOrders;
+  const maxTopQty = Math.max(1, ...topItems.map((i) => i.qty));
+
   return (
     <div className="space-y-6">
       <div>
         <h1>Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+        <p className="text-muted-foreground">
+          {dashboard?.scope === "all-branches"
+            ? "Combined view across all branches."
+            : "Here's what's happening today."}
+        </p>
       </div>
 
-      {/* Special Orders summary */}
-      <Card
-        className="border-l-4 border-l-[#C4B5FD] cursor-pointer hover:shadow-md transition-shadow"
-        onClick={() => onNavigate?.("specialOrders")}
-        role="button"
-      >
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-[#7C3AED]" />
-              Special Orders
-              <Badge className="bg-[#C4B5FD] text-[#3730A3]">{upcomingSpecial.length} upcoming</Badge>
-              {pendingBalanceCount > 0 && (
-                <Badge className="bg-destructive/20 text-destructive">
-                  {pendingBalanceCount} balance pending
-                </Badge>
-              )}
-            </CardTitle>
-            <Button variant="ghost" size="sm" className="gap-1">
-              View All <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {upcomingSpecial.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No upcoming special orders.</div>
-          ) : (
-            <div className="space-y-2">
-              {upcomingSpecial.slice(0, 3).map((o) => (
-                <div
-                  key={o._id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        o.balanceCollected ? "bg-[#BBF7D0]" : "bg-red-500"
-                      }`}
-                      title={o.balanceCollected ? "Fully paid" : "Balance pending"}
-                    />
-                    <div>
-                      <div className="text-sm">{o.customerName}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {o.items?.[0]
-                          ? `${o.items[0].qty}x ${o.items[0].name}${
-                              o.items.length > 1 ? ` +${o.items.length - 1} more` : ""
-                            }`
-                          : ""}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground text-right">
-                    {formatSpecialDate(o.deliveryDate)}
-                    <div>{o.deliveryTime}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Revenue Snapshot */}
+      {/* Top stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0 }}
-        >
-          <Card className="border-l-4 border-l-[#7DD3FC] shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Today's Revenue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl">₹12,458</div>
-                  <div className="flex items-center gap-1 text-sm text-[#10B981] mt-1">
-                    <TrendingUp className="w-4 h-4" />
-                    <span>+12.5%</span>
-                  </div>
-                </div>
-                <ResponsiveContainer width={80} height={40}>
-                  <LineChart data={revenueData.slice(0, 4)}>
-                    <Line type="monotone" dataKey="amount" stroke="#7DD3FC" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-7 w-20" />
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
+              <Card className="border-l-4 border-l-[#7DD3FC] shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Today's Revenue</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl">₹{(today?.totalRevenue || 0).toLocaleString()}</div>
+                  <div className="text-sm text-muted-foreground mt-1">{today?.totalBills || 0} bills</div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="border-l-4 border-l-[#FBCFE8] shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">This Week</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl">₹84,250</div>
-                  <div className="flex items-center gap-1 text-sm text-[#10B981] mt-1">
-                    <TrendingUp className="w-4 h-4" />
-                    <span>+8.2%</span>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <Card className="border-l-4 border-l-[#FBCFE8] shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Cash vs UPI</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm">
+                    ₹{(today?.cashRevenue || 0).toLocaleString()} / ₹{(today?.upiRevenue || 0).toLocaleString()}
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card className="border-l-4 border-l-[#BBF7D0] shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">This Month</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl">₹342,890</div>
-                  <div className="flex items-center gap-1 text-sm text-[#EF4444] mt-1">
-                    <TrendingDown className="w-4 h-4" />
-                    <span>-2.4%</span>
+                  <div className="flex h-2 rounded-full overflow-hidden mt-2 bg-muted">
+                    {(() => {
+                      const total = (today?.cashRevenue || 0) + (today?.upiRevenue || 0);
+                      const cashPct = total > 0 ? ((today?.cashRevenue || 0) / total) * 100 : 50;
+                      return (
+                        <>
+                          <div className="bg-[#7DD3FC]" style={{ width: `${cashPct}%` }} />
+                          <div className="bg-[#FBCFE8]" style={{ width: `${100 - cashPct}%` }} />
+                        </>
+                      );
+                    })()}
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="border-l-4 border-l-[#FDE68A] shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Active Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl">24</div>
-                  <div className="text-sm text-muted-foreground mt-1">8 pending</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Card className="border-l-4 border-l-[#BBF7D0] shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Avg Bill Value</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl">₹{today?.avgBillValue || 0}</div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Card
+                className={`border-l-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
+                  (lowStock?.count || 0) > 0 ? "border-l-red-400" : "border-l-[#FDE68A]"
+                }`}
+                onClick={openLowStock}
+                role="button"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Low Stock Alerts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl ${(lowStock?.count || 0) > 0 ? "text-red-600" : ""}`}>
+                    {lowStock?.count || 0}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Active Orders */}
-        <Card className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Dine-in vs Takeaway */}
+        <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Active Orders</CardTitle>
-              <Button variant="ghost" size="sm">View All</Button>
-            </div>
+            <CardTitle>Dine-in vs Takeaway</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {activeOrders.map((order, index) => (
-                <motion.div
-                  key={order.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="text-center">
-                      <div>{order.id}</div>
-                      <div className="text-xs text-muted-foreground capitalize">{order.orderType}</div>
-                    </div>
-                    <div className="text-sm text-muted-foreground">{order.items} items</div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="w-4 h-4" />
-                      {order.time}
-                    </div>
-                    <Badge
-                      className={
-                        order.status === "ready"
-                          ? "bg-[#BBF7D0] text-[#047857]"
-                          : order.status === "cooking"
-                          ? "bg-[#FDE68A] text-[#92400E]"
-                          : "bg-[#FBCFE8] text-[#9F1239]"
-                      }
-                    >
-                      {order.status}
-                    </Badge>
-                  </div>
-                </motion.div>
-              ))}
+            <div className="space-y-2 mb-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span>🍵 Dine-in: {today?.dineInCount || 0} bills</span>
+                <span>₹{(today?.dineInRevenue || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>🥡 Takeaway: {today?.takeawayCount || 0} bills</span>
+                <span>₹{(today?.takeawayRevenue || 0).toLocaleString()}</span>
+              </div>
             </div>
+            <ResponsiveContainer width="100%" height={120}>
+              <BarChart
+                data={[
+                  { type: "Dine-in", revenue: today?.dineInRevenue || 0 },
+                  { type: "Takeaway", revenue: today?.takeawayRevenue || 0 },
+                ]}
+                layout="vertical"
+              >
+                <XAxis type="number" hide />
+                <YAxis type="category" dataKey="type" width={70} />
+                <Tooltip />
+                <Bar dataKey="revenue" fill="#7DD3FC" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Staff On Duty */}
-        <Card>
+        {/* Special Orders */}
+        <Card
+          className="border-l-4 border-l-[#C4B5FD] cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => onNavigate?.("specialOrders")}
+          role="button"
+        >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Staff On Duty
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-[#7C3AED]" />
+                Special Orders
+                <Badge className="bg-[#C4B5FD] text-[#3730A3]">{specialOrders?.upcomingCount || 0} upcoming</Badge>
+                {(specialOrders?.pendingBalanceCount || 0) > 0 && (
+                  <Badge className="bg-destructive/20 text-destructive">
+                    {specialOrders?.pendingBalanceCount} balance pending
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="gap-1">
+                View All <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {["Sarah (Manager)", "Mike (Chef)", "Anna (Waiter)", "Tom (Cashier)"].map((staff, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7DD3FC] to-[#FBCFE8] flex items-center justify-center">
-                    <span className="text-sm text-white">{staff[0]}</span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm">{staff}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {Math.floor(Math.random() * 4 + 2)}h active
+            {!specialOrders?.upcoming?.length ? (
+              <div className="text-sm text-muted-foreground">No upcoming special orders.</div>
+            ) : (
+              <div className="space-y-2">
+                {specialOrders.upcoming.slice(0, 3).map((o) => (
+                  <div key={o._id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`w-2 h-2 rounded-full ${o.balanceCollected ? "bg-[#BBF7D0]" : "bg-red-500"}`}
+                        title={o.balanceCollected ? "Fully paid" : "Balance pending"}
+                      />
+                      <div className="text-sm">{o.customerName}</div>
+                    </div>
+                    <div className="text-xs text-muted-foreground text-right">
+                      ₹{o.totalAmount}
+                      <div>
+                        {formatDate(o.deliveryDate)} {o.deliveryTime}
+                      </div>
                     </div>
                   </div>
-                  <div className="w-2 h-2 rounded-full bg-[#BBF7D0]"></div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Selling Items */}
+        {/* Weekly Revenue Trend */}
         <Card>
           <CardHeader>
-            <CardTitle>Top Selling Items</CardTitle>
+            <CardTitle>Weekly Revenue Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topItems.map((item, index) => (
-                <motion.div
-                  key={item.name}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-center gap-4"
-                >
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#7DD3FC]/20 to-[#FBCFE8]/20 flex items-center justify-center text-2xl">
-                    {item.image}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm">{item.name}</div>
-                    <div className="text-xs text-muted-foreground">{item.sales} orders</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm">₹{item.revenue}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {Math.round((item.sales / 400) * 100)}%
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={trend.map((t) => ({ ...t, label: formatDayLabel(t.date) }))}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" />
+                <YAxis />
+                <Tooltip formatter={(value: number) => `₹${value}`} />
+                <Line type="monotone" dataKey="revenue" stroke="#7DD3FC" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Live Floor Map */}
+        {/* Top Selling Items */}
         <Card>
           <CardHeader>
-            <CardTitle>Live Floor Map</CardTitle>
+            <CardTitle>Top Selling Items Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-3">
-              {tables.map((table) => (
-                <motion.div
-                  key={table.id}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`aspect-square rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${
-                    table.status === "occupied"
-                      ? "bg-[#FBCFE8]/30 border-2 border-[#FBCFE8]"
-                      : table.status === "reserved"
-                      ? "bg-[#FDE68A]/30 border-2 border-[#FDE68A]"
-                      : "bg-[#BBF7D0]/30 border-2 border-[#BBF7D0]"
-                  }`}
-                >
-                  <div className="text-sm">{table.number}</div>
-                  {table.status === "occupied" && (
-                    <div className="text-xs text-muted-foreground">{table.guests} guests</div>
-                  )}
-                  {table.status === "reserved" && (
-                    <div className="text-xs text-muted-foreground">Reserved</div>
-                  )}
-                </motion.div>
-              ))}
-            </div>
+            {topItems.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No items sold yet today.</div>
+            ) : (
+              <div className="space-y-3">
+                {topItems.map((item) => (
+                  <div key={item.name}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span>{item.name}</span>
+                      <span className="text-muted-foreground">
+                        {item.qty} sold · ₹{item.revenue}
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-[#7DD3FC]"
+                        style={{ width: `${(item.qty / maxTopQty) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Low Stock Alerts — live from inventory API */}
+      {/* Low Stock Alerts */}
       <Card
         className="border-l-4 border-l-red-400 cursor-pointer hover:shadow-md transition-shadow"
         onClick={openLowStock}
@@ -405,14 +296,8 @@ export function Dashboard({ onNavigate }: DashboardProps = {}) {
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
               Low Stock Alerts
-              <Badge
-                className={
-                  lowStock.length > 0
-                    ? "bg-red-100 text-red-800 border-0"
-                    : "bg-green-100 text-green-800 border-0"
-                }
-              >
-                {lowStockLoading ? "…" : lowStock.length}
+              <Badge className={(lowStock?.count || 0) > 0 ? "bg-red-100 text-red-800 border-0" : "bg-green-100 text-green-800 border-0"}>
+                {isLoading ? "…" : lowStock?.count || 0}
               </Badge>
             </CardTitle>
             <Button variant="ghost" size="sm" className="gap-1">
@@ -421,17 +306,13 @@ export function Dashboard({ onNavigate }: DashboardProps = {}) {
           </div>
         </CardHeader>
         <CardContent>
-          {lowStockLoading ? (
-            <div className="text-sm text-muted-foreground">Checking stock levels…</div>
-          ) : lowStock.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              All inventory items are above their minimum level. 🎉
-            </div>
+          {!lowStock?.items?.length ? (
+            <div className="text-sm text-muted-foreground">All inventory items are above their minimum level. 🎉</div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {lowStock.slice(0, 12).map((item) => (
+              {lowStock.items.map((item) => (
                 <div
-                  key={item._id}
+                  key={item.name}
                   className="px-3 py-1.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm flex items-center gap-2"
                 >
                   <Package className="w-3.5 h-3.5 text-red-500" />
@@ -441,48 +322,48 @@ export function Dashboard({ onNavigate }: DashboardProps = {}) {
                   </span>
                 </div>
               ))}
-              {lowStock.length > 12 && (
-                <div className="px-3 py-1.5 text-sm text-muted-foreground">
-                  +{lowStock.length - 12} more…
-                </div>
-              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Alerts */}
-      {alerts.length > 0 && (
+      {/* Branch Performance — super_admin viewing all branches only */}
+      {dashboard?.scope === "all-branches" && (
         <Card>
           <CardHeader>
-            <CardTitle>Alerts & Notifications</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Branch Performance
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {alerts.map((alert, index) => {
-                const Icon = alert.icon;
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className={`flex items-center gap-4 p-4 rounded-lg ${
-                      alert.type === "error"
-                        ? "bg-destructive/10"
-                        : alert.type === "warning"
-                        ? "bg-[#FDE68A]/30"
-                        : "bg-[#7DD3FC]/10"
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <div className="flex-1 text-sm">{alert.message}</div>
-                    <Button variant="ghost" size="sm">
-                      Resolve
-                    </Button>
-                  </motion.div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4">Branch</th>
+                    <th className="py-2 pr-4">City</th>
+                    <th className="py-2 pr-4">Orders Today</th>
+                    <th className="py-2 pr-4">Revenue Today</th>
+                    <th className="py-2 pr-4">Staff Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.branchBreakdown.map((b) => (
+                    <tr
+                      key={b.branchId}
+                      className="border-b last:border-0 cursor-pointer hover:bg-muted/30"
+                      onClick={() => setSelectedBranchId(b.branchId)}
+                    >
+                      <td className="py-2 pr-4">{b.branchName}</td>
+                      <td className="py-2 pr-4 text-muted-foreground">{b.city}</td>
+                      <td className="py-2 pr-4">{b.ordersToday}</td>
+                      <td className="py-2 pr-4">₹{b.revenueToday.toLocaleString()}</td>
+                      <td className="py-2 pr-4">{b.staffCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
