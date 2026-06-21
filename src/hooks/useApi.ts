@@ -475,6 +475,39 @@ export const useUpdateBranch = () => {
   });
 };
 
+// ---------------- DASHBOARD ----------------
+
+export const useDashboard = () => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["dashboard", selectedBranchId],
+    queryFn: () => apiFetch("/dashboard", accessToken),
+    enabled: !!accessToken,
+    refetchInterval: 60 * 1000, // auto-refresh every 1 min
+  });
+};
+
+export const useWeeklyTrend = () => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["dashboard-trend", selectedBranchId],
+    queryFn: () => apiFetch("/dashboard/weekly-trend", accessToken),
+    enabled: !!accessToken,
+  });
+};
+
+export const useTopItems = () => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["dashboard-top-items", selectedBranchId],
+    queryFn: () => apiFetch("/dashboard/top-items", accessToken),
+    enabled: !!accessToken,
+  });
+};
+
 // ---------------- ROLES (sidebar/screen permissions) ----------------
 
 export const useRoles = () => {
