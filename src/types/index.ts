@@ -59,6 +59,58 @@ export interface Settings {
   printerPort: string;
 }
 
+export interface DashboardData {
+  scope: "all-branches" | "single-branch";
+  today: {
+    totalRevenue: number;
+    cashRevenue: number;
+    upiRevenue: number;
+    totalBills: number;
+    cancelledCount: number;
+    avgBillValue: number;
+    dineInCount: number;
+    dineInRevenue: number;
+    takeawayCount: number;
+    takeawayRevenue: number;
+  };
+  lowStock: {
+    count: number;
+    items: { name: string; currentQty: number; minQty: number; unit: string }[];
+  };
+  specialOrders: {
+    upcomingCount: number;
+    pendingBalanceCount: number;
+    upcoming: {
+      _id: string;
+      customerName: string;
+      deliveryDate: string;
+      deliveryTime: string;
+      totalAmount: number;
+      balanceCollected: boolean;
+    }[];
+  };
+  branchBreakdown: {
+    branchId: string;
+    branchName: string;
+    city: string;
+    ordersToday: number;
+    revenueToday: number;
+    staffCount: number;
+  }[];
+}
+
+export interface WeeklyTrendPoint {
+  date: string;
+  revenue: number;
+  bills: number;
+}
+
+export interface TopItem {
+  name: string;
+  qty: number;
+  revenue: number;
+}
+
 export interface SpecialOrder {
   _id: string;
   customerName: string;
