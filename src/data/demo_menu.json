@@ -1,0 +1,20 @@
+[
+  {
+    "sku": "SKU-001",
+    "name": "Margherita Pizza",
+    "price": 299,
+    "tax": 5,
+    "category": "Pizza",
+    "qty": 10,
+    "kitchen_display": true
+  },
+  {
+    "sku": "SKU-002",
+    "name": "Veg Burger",
+    "price": 149,
+    "tax": 5,
+    "category": "Burgers",
+    "qty": 15,
+    "kitchen_display": true
+  }
+]

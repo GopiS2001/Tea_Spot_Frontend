@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ORD-001",
+    "table": "T-1",
+    "status": "done",
+    "totalAmount": 448,
+    "profit": 112,
+    "createdAt": "2025-01-10T12:00:00"
+  },
+  {
+    "id": "ORD-002",
+    "table": "Takeaway",
+    "status": "active",
+    "totalAmount": 120,
+    "profit": 30,
+    "createdAt": "2025-01-11T18:30:00"
+  }
+]

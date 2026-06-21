@@ -1,0 +1,7 @@
+[
+  { "id": 1, "sku": "PZ001", "name": "Margherita Pizza", "price": 299, "tax": 5, "category": "Pizza", "qty": 15, "kitchen_display": true },
+  { "id": 2, "sku": "BG001", "name": "Classic Burger", "price": 199, "tax": 5, "category": "Burgers", "qty": 20, "kitchen_display": true },
+  { "id": 3, "sku": "SL001", "name": "Caesar Salad", "price": 149, "tax": 5, "category": "Salads", "qty": 10, "kitchen_display": true },
+  { "id": 4, "sku": "PS001", "name": "Pasta Alfredo", "price": 249, "tax": 5, "category": "Pasta", "qty": 12, "kitchen_display": true },
+  { "id": 5, "sku": "DS001", "name": "Chocolate Sundae", "price": 159, "tax": 5, "category": "Desserts", "qty": 8, "kitchen_display": true }
+]

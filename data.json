@@ -1,0 +1,15 @@
+{
+  "orders": {
+    "order_001": {
+      "id": "order_001",
+      "table": "T1",
+      "items": [
+        { "name": "Paneer Tikka", "qty": 2, "price": 200 }
+      ],
+      "status": "active",
+      "timestamp": 1735123244214,
+      "totalAmount": 400,
+      "profit": 120
+    }
+  }
+}
