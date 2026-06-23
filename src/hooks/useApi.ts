@@ -508,6 +508,61 @@ export const useTopItems = () => {
   });
 };
 
+// ---------------- REPORTS ----------------
+
+export interface ReportDateParams {
+  range?: "today" | "week" | "month" | "custom";
+  startDate?: string;
+  endDate?: string;
+}
+
+const reportQs = (params: ReportDateParams) =>
+  qs({
+    range: params.range !== "custom" ? params.range : undefined,
+    startDate: params.range === "custom" ? params.startDate : undefined,
+    endDate: params.range === "custom" ? params.endDate : undefined,
+  });
+
+export const useDailyReport = (params: ReportDateParams) => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["report-daily", params, selectedBranchId],
+    queryFn: () => apiFetch(`/reports/daily${reportQs(params)}`, accessToken),
+    enabled: !!accessToken,
+  });
+};
+
+export const useEmployeeReport = (params: ReportDateParams) => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["report-employee", params, selectedBranchId],
+    queryFn: async () =>
+      (await apiFetch(`/reports/employee${reportQs(params)}`, accessToken)).employees,
+    enabled: !!accessToken,
+  });
+};
+
+export const useItemReport = (params: ReportDateParams) => {
+  const { accessToken } = useAuth();
+  const { selectedBranchId } = useBranch();
+  return useQuery({
+    queryKey: ["report-items", params, selectedBranchId],
+    queryFn: async () =>
+      (await apiFetch(`/reports/items${reportQs(params)}`, accessToken)).items,
+    enabled: !!accessToken,
+  });
+};
+
+export const useExportReport = () => {
+  const { accessToken } = useAuth();
+  return useMutation({
+    mutationFn: ({ type, params }: { type: "daily" | "employee" | "item"; params: ReportDateParams }) =>
+      downloadFile(`/reports/export/${type}${reportQs(params)}`, accessToken, `${type}-report.csv`),
+  });
+};
+
 // ---------------- ROLES (sidebar/screen permissions) ----------------
 
 export const useRoles = () => {
