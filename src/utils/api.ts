@@ -60,6 +60,38 @@ export async function uploadFile(path: string, token: string | null | undefined,
   return response.json();
 }
 
+// Downloads a CSV (or other file) response and triggers a browser save,
+// reusing the same auth + branch-scoping rules as apiFetch.
+export async function downloadFile(path: string, token: string | null | undefined, filename: string) {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${appendBranchScope(path)}`, { headers });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.json();
+      message = body.message || message;
+    } catch {
+      // ignore json parse errors
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 // `scopeBranch` controls whether the Topbar-selected branch is auto-attached
 // as ?branchId= for super_admin. Cross-branch admin screens (e.g. Users, which
 // has its own branch filter) pass `false` so the Topbar selection doesn't
