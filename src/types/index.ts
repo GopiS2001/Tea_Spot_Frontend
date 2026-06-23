@@ -111,6 +111,38 @@ export interface TopItem {
   revenue: number;
 }
 
+export interface DailyReportSummary {
+  totalRevenue: number;
+  totalBills: number;
+  cancelledCount: number;
+  cashTotal: number;
+  upiTotal: number;
+  avgBillValue: number;
+  dineInCount: number;
+  dineInRevenue: number;
+  takeawayCount: number;
+  takeawayRevenue: number;
+}
+
+export interface DailyBreakdownPoint {
+  date: string;
+  revenue: number;
+  bills: number;
+}
+
+export interface EmployeeReportRow {
+  name: string;
+  bills: number;
+  revenue: number;
+  avgBillValue: number;
+}
+
+export interface ItemReportRow {
+  name: string;
+  qty: number;
+  revenue: number;
+}
+
 export interface SpecialOrder {
   _id: string;
   customerName: string;
